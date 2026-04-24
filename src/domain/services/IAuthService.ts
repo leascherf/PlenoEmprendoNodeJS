@@ -2,6 +2,10 @@
 //  DOMAIN INTERFACE: IAuthService
 //  Abstrae la autenticación. El dominio no sabe
 //  si es Google, JWT propio, u otro proveedor.
+//
+//  AuthUser contiene solo identidad — sin tokens.
+//  Los tokens son un detalle de infraestructura
+//  que vive en GoogleAuthService.
 // ─────────────────────────────────────────────
 
 export interface AuthUser {
@@ -9,8 +13,6 @@ export interface AuthUser {
   email: string;
   name: string;
   picture: string;
-  accessToken: string;
-  refreshToken?: string;
 }
 
 export interface IAuthService {
@@ -20,13 +22,7 @@ export interface IAuthService {
   getAuthUrl(): string;
 
   /**
-   * Intercambia el código de callback por un usuario autenticado.
+   * Intercambia el código de callback por la identidad del usuario.
    */
   exchangeCode(code: string): Promise<AuthUser>;
-
-  /**
-   * Verifica si un access token sigue siendo válido.
-   * Refresca automáticamente si hay refreshToken disponible.
-   */
-  verifyAndRefresh(user: AuthUser): Promise<AuthUser>;
 }

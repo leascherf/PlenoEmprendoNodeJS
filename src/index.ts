@@ -3,14 +3,13 @@ import express, { Request, Response, NextFunction } from 'express';
 import session from 'express-session';
 import cors from 'cors';
 import { loadConfig } from './infrastructure/config/config';
-import { GoogleAuthService } from './infrastructure/google/GoogleAuthService';
+import { GoogleAuthService, GoogleAuthCredentials } from './infrastructure/google/GoogleAuthService';
 import { GoogleSheetsRepository } from './infrastructure/google/GoogleSheetsRepository';
 import { createAuthRouter } from './presentation/routes/auth';
 import { leadsRouter } from './presentation/routes/leads';
 import { ILeadRepository } from './domain/repositories/ILeadRepository';
 import { AuthUser } from './domain/services/IAuthService';
 
-// Extender Request para TypeScript
 declare module 'express-serve-static-core' {
   interface Request {
     currentUser?: AuthUser;
@@ -42,20 +41,23 @@ async function bootstrap() {
     },
   }));
 
-  // Middleware: construye el repository una vez por request y lo adjunta a req
+  // Middleware: reconstruye el repository por request usando la identidad
+  // y las credenciales OAuth guardadas por separado en la sesión.
   app.use((req: Request, _res: Response, next: NextFunction) => {
     const user = (req.session as any)?.user as AuthUser | undefined;
-    if (user) {
-      const oauthClient = authService.getAuthenticatedClient(user);
+    const credentials = (req.session as any)?.oauthCredentials as GoogleAuthCredentials | undefined;
+
+    if (user && credentials) {
+      const oauthClient = authService.getAuthenticatedClient(credentials);
       req.leadRepository = new GoogleSheetsRepository(oauthClient, config.sheets);
       req.currentUser = user;
     }
+
     next();
   });
 
   app.use('/api/auth', createAuthRouter(authService));
 
-  // Guard: rechaza requests sin sesión antes de que lleguen al router de leads
   app.use('/api/leads', (req: Request, res: Response, next: NextFunction) => {
     if (!req.leadRepository) {
       res.status(401).json({ error: 'No autenticado' });
