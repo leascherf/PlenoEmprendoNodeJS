@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────
 
 import { Lead, LeadInfo, LeadState, EstadoLead } from '../../domain/entities/Lead';
-import { SheetConfig } from '../config/sheets';
+import { SheetConfig } from '../config/config';
 
 // Fila cruda tal como llega de Sheets API (array de strings)
 export type RawRow = Record<string, string>;

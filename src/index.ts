@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import session from 'express-session';
 import cors from 'cors';
-import { loadConfig } from './infrastructure/config/sheets';
+import { loadConfig } from './infrastructure/config/config';
 import { GoogleAuthService } from './infrastructure/google/GoogleAuthService';
 import { GoogleSheetsRepository } from './infrastructure/google/GoogleSheetsRepository';
 import { createAuthRouter } from './presentation/routes/auth';

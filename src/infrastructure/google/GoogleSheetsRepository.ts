@@ -9,7 +9,7 @@ import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { Lead, LeadState } from '../../domain/entities/Lead';
 import { ILeadRepository, LeadFilter } from '../../domain/repositories/ILeadRepository';
-import { SheetsConfig } from '../config/sheets';
+import { SheetsConfig } from '../config/config';
 import { LeadMapper, RawRow, normalizePhone } from './LeadMapper';
 import { v4 as uuidv4 } from 'uuid';
 

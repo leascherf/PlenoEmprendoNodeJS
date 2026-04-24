@@ -7,7 +7,7 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { IAuthService, AuthUser } from '../../domain/services/IAuthService';
-import { GoogleOAuthConfig } from '../config/sheets';
+import { GoogleOAuthConfig } from '../config/config';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
