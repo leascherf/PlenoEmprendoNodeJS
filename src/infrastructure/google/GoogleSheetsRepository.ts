@@ -79,7 +79,7 @@ export class GoogleSheetsRepository implements ILeadRepository {
     this.cache = null;
   }
 
-  async sync(): Promise<{ added: number; updated: number }> {
+  async sync(): Promise<{ added: number; skipped: number }> {
     const sheets = google.sheets({ version: 'v4', auth: this.auth });
     const mainCfg = this.config.main;
     const secCfg = this.config.secondary;
@@ -99,7 +99,7 @@ export class GoogleSheetsRepository implements ILeadRepository {
     );
 
     let added = 0;
-    let updated = 0;
+    let skipped = 0;
     const newRows: string[][] = [];
 
     for (const mainRow of mainRows) {
@@ -130,7 +130,7 @@ export class GoogleSheetsRepository implements ILeadRepository {
         newRows.push(newRow);
         added++;
       } else {
-        updated++;
+        skipped++;
       }
     }
 
@@ -149,7 +149,7 @@ export class GoogleSheetsRepository implements ILeadRepository {
     // Invalidar cache
     this.cache = null;
 
-    return { added, updated };
+    return { added, skipped };
   }
 
   // ── Privados ──────────────────────────────────────────────────────
@@ -233,15 +233,6 @@ export class GoogleSheetsRepository implements ILeadRepository {
       });
       return obj;
     });
-  }
-
-  private async getHeaders(
-    spreadsheetId: string,
-    gid: string,
-    headerRow: number
-  ): Promise<string[]> {
-    const rows = await this.getRawRows(spreadsheetId, gid, headerRow);
-    return rows.length > 0 ? Object.keys(rows[0]) : [];
   }
 
   private sheetTitleCache = new Map<string, string>();

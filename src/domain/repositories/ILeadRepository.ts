@@ -39,5 +39,5 @@ export interface ILeadRepository {
    * - Agrega filas nuevas que están en Main pero no en Secondary
    * - Asigna ContactId a las que no lo tienen
    */
-  sync(): Promise<{ added: number; updated: number }>;
+  sync(): Promise<{ added: number; skipped: number }>;
 }
