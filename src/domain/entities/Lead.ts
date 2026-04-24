@@ -51,30 +51,30 @@ export interface LeadState {
   ultimaActualizacion: Date | null;
 }
 
+// Todos los valores en Title Case. Los valores anteriores en ALLCAPS ('LEAD INICIADO',
+// 'FINALIZADO') venían de la planilla WinForms y se normalizan en LeadMapper.
 export type EstadoLead =
-  | 'LEAD INICIADO'
+  | 'Lead Iniciado'
   | 'Crear Grupo'
   | 'Grupo Creado'
   | 'Link Enviado: Seguimiento'
-  | 'Enviar mensaje en grupo'
+  | 'Enviar Mensaje en Grupo'
   | 'Notificar al Closer'
-  | 'FINALIZADO'
+  | 'Finalizado'
   | '';
 
-// Entidad completa que circula por la app
 export interface Lead {
   info: LeadInfo;
   state: LeadState;
-  // Fuente de los datos para auditoría
   source: 'main' | 'secondary' | 'merged';
 }
 
-// ─── Value objects / helpers ───────────────────
+// ─── Helpers de dominio ────────────────────────
+// Centralizan las reglas de negocio sobre el estado de un lead.
+// Deben usarse en lugar de comparar strings directamente.
 
 export function isFinalized(lead: Lead): boolean {
-  return (
-    lead.state.estadoLead === 'FINALIZADO' || lead.state.cerradoManual
-  );
+  return lead.state.estadoLead === 'Finalizado' || lead.state.cerradoManual;
 }
 
 export function hasDuplicate(lead: Lead): boolean {

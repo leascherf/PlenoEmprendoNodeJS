@@ -1,25 +1,25 @@
 // ─────────────────────────────────────────────
 //  INFRASTRUCTURE: LeadMapper
 //  Convierte filas crudas de Google Sheets → entidades Lead.
-//  Equivale a LeadRowMapper.cs + LeadRecord.cs del WinForms.
 // ─────────────────────────────────────────────
 
 import { Lead, LeadInfo, LeadState, EstadoLead } from '../../domain/entities/Lead';
 import { SheetConfig } from '../config/config';
 
-// Fila cruda tal como llega de Sheets API (array de strings)
 export type RawRow = Record<string, string>;
 
+// Mapea cualquier variante de casing (heredadas del WinForms o la planilla)
+// al valor canónico de EstadoLead. Case-insensitive.
 const ESTADO_LEAD_NORMALIZE: Record<string, EstadoLead> = {
-  'lead iniciado': 'LEAD INICIADO',
+  'lead iniciado': 'Lead Iniciado',
   'crear grupo': 'Crear Grupo',
   'grupo creado': 'Grupo Creado',
   'link enviado: seguimiento': 'Link Enviado: Seguimiento',
   'link enviado seguimiento': 'Link Enviado: Seguimiento',
-  'enviar mensaje en grupo': 'Enviar mensaje en grupo',
+  'enviar mensaje en grupo': 'Enviar Mensaje en Grupo',
   'notificar al closer': 'Notificar al Closer',
-  'finalizado': 'FINALIZADO',
-  'cerrado manualmente': 'FINALIZADO',
+  'finalizado': 'Finalizado',
+  'cerrado manualmente': 'Finalizado',
 };
 
 export class LeadMapper {
@@ -28,9 +28,6 @@ export class LeadMapper {
     private readonly secCfg: SheetConfig
   ) {}
 
-  /**
-   * Convierte una fila mergeada (Main + Secondary) en una entidad Lead.
-   */
   fromMergedRow(row: RawRow): Lead {
     const info = this.extractInfo(row);
     const state = this.extractState(row);
@@ -45,32 +42,33 @@ export class LeadMapper {
     return { state: this.extractState(row), source: 'secondary' };
   }
 
-  // ── Serialización inversa: Lead → objeto para escribir en Sheets ──
-
+  // Serialización inversa: LeadState → columnas de la planilla Secondary.
+  // Usa secCfg para los campos que tienen configuración explícita;
+  // el resto son nombres fijos de la estructura de la planilla.
   stateToSheetRow(state: Partial<LeadState>): Record<string, string> {
     const row: Record<string, string> = {};
 
-    if (state.estadoLead !== undefined)         row['Estado Lead'] = state.estadoLead;
-    if (state.whatsappEnviado !== undefined)     row['Enviar Whatsapp'] = boolStr(state.whatsappEnviado);
-    if (state.conversacionIniciadaPor !== undefined) row['Quien Inicio conversacion'] = state.conversacionIniciadaPor;
-    if (state.audioEnviado !== undefined)        row['Enviar Audio'] = boolStr(state.audioEnviado);
-    if (state.fechaCreacionGrupo !== undefined)  row['Fecha Creacion Grupo'] = dateStr(state.fechaCreacionGrupo);
-    if (state.descripcionGrupo !== undefined)    row['grupo + descripcion'] = state.descripcionGrupo;
-    if (state.addFoto !== undefined)             row['add foto'] = boolStr(state.addFoto);
-    if (state.agregarDescripcion !== undefined)  row['agregar descripcion grupo'] = boolStr(state.agregarDescripcion);
-    if (state.linkEnviado !== undefined)         row['enviar link de grupo al lead'] = boolStr(state.linkEnviado);
-    if (state.fechaEnvioLink !== undefined)      row['Fecha envio link'] = dateStr(state.fechaEnvioLink);
-    if (state.clienteEnGrupo !== undefined)      row['cliente en grupo'] = boolStr(state.clienteEnGrupo);
-    if (state.enviarPrimerMensaje !== undefined) row['Enviar 1er mensaje'] = boolStr(state.enviarPrimerMensaje);
-    if (state.primerMensajeTipo !== undefined)   row['AS O LAN?'] = state.primerMensajeTipo;
-    if (state.pasoACloser !== undefined)         row['Paso a closer'] = boolStr(state.pasoACloser);
-    if (state.fechaPasoACloser !== undefined)    row['Fecha Paso a closer'] = dateStr(state.fechaPasoACloser);
-    if (state.posibleDuplicado !== undefined)    row['Posible Duplicado'] = boolStr(state.posibleDuplicado);
-    if (state.duplicadoChequeado !== undefined)  row['Duplicado Chequeado'] = boolStr(state.duplicadoChequeado);
-    if (state.cerradoManual !== undefined)       row['Cerrado Manual'] = boolStr(state.cerradoManual);
-    if (state.fechaUltimoSeguimiento !== undefined) row['Fecha Ultimo seguimiento'] = dateStr(state.fechaUltimoSeguimiento);
-    if (state.reintentosSeguimiento !== undefined) row['N Reintentos Seguimiento'] = String(state.reintentosSeguimiento);
-    if (state.ultimaActualizacion !== undefined) row['Ultima Actualizacion Lead'] = dateStr(state.ultimaActualizacion);
+    if (state.estadoLead !== undefined)              row[this.secCfg.estadoLeadColumn]          = state.estadoLead;
+    if (state.whatsappEnviado !== undefined)          row['Enviar Whatsapp']                      = boolStr(state.whatsappEnviado);
+    if (state.conversacionIniciadaPor !== undefined)  row['Quien Inicio conversacion']             = state.conversacionIniciadaPor;
+    if (state.audioEnviado !== undefined)             row['Enviar Audio']                         = boolStr(state.audioEnviado);
+    if (state.fechaCreacionGrupo !== undefined)       row['Fecha Creacion Grupo']                 = dateStr(state.fechaCreacionGrupo);
+    if (state.descripcionGrupo !== undefined)         row['grupo + descripcion']                  = state.descripcionGrupo;
+    if (state.addFoto !== undefined)                  row['add foto']                             = boolStr(state.addFoto);
+    if (state.agregarDescripcion !== undefined)       row['agregar descripcion grupo']             = boolStr(state.agregarDescripcion);
+    if (state.linkEnviado !== undefined)              row['enviar link de grupo al lead']          = boolStr(state.linkEnviado);
+    if (state.fechaEnvioLink !== undefined)           row['Fecha envio link']                     = dateStr(state.fechaEnvioLink);
+    if (state.clienteEnGrupo !== undefined)           row['cliente en grupo']                     = boolStr(state.clienteEnGrupo);
+    if (state.enviarPrimerMensaje !== undefined)      row['Enviar 1er mensaje']                   = boolStr(state.enviarPrimerMensaje);
+    if (state.primerMensajeTipo !== undefined)        row['AS O LAN?']                            = state.primerMensajeTipo;
+    if (state.pasoACloser !== undefined)              row['Paso a closer']                        = boolStr(state.pasoACloser);
+    if (state.fechaPasoACloser !== undefined)         row['Fecha Paso a closer']                  = dateStr(state.fechaPasoACloser);
+    if (state.posibleDuplicado !== undefined)         row['Posible Duplicado']                    = boolStr(state.posibleDuplicado);
+    if (state.duplicadoChequeado !== undefined)       row['Duplicado Chequeado']                  = boolStr(state.duplicadoChequeado);
+    if (state.cerradoManual !== undefined)            row['Cerrado Manual']                       = boolStr(state.cerradoManual);
+    if (state.fechaUltimoSeguimiento !== undefined)   row['Fecha Ultimo seguimiento']              = dateStr(state.fechaUltimoSeguimiento);
+    if (state.reintentosSeguimiento !== undefined)    row['N Reintentos Seguimiento']             = String(state.reintentosSeguimiento);
+    if (state.ultimaActualizacion !== undefined)      row['Ultima Actualizacion Lead']            = dateStr(state.ultimaActualizacion);
 
     return row;
   }
@@ -104,7 +102,7 @@ export class LeadMapper {
   }
 
   private extractState(row: RawRow): LeadState {
-    const estadoRaw = this.getString(row, 'Estado Lead', 'EstadoLead', 'Estado');
+    const estadoRaw = this.getString(row, this.secCfg.estadoLeadColumn, 'EstadoLead', 'Estado');
     const estadoLead = normalizeEstado(estadoRaw);
 
     return {
@@ -113,7 +111,7 @@ export class LeadMapper {
       conversacionIniciadaPor: this.getString(row, 'Quien Inicio conversacion') as 'Setter' | 'Lead' | '',
       audioEnviado: this.getBool(row, 'Enviar Audio'),
       fechaCreacionGrupo: this.getDate(row, 'Fecha Creacion Grupo'),
-      descripcionGrupo: this.getString(row, 'grupo + descripcion', 'RESPUESTAS'),
+      descripcionGrupo: this.getString(row, 'grupo + descripcion'),
       addFoto: this.getBool(row, 'add foto'),
       agregarDescripcion: this.getBool(row, 'agregar descripcion grupo'),
       linkEnviado: this.getBool(row, 'enviar link de grupo al lead'),
@@ -128,7 +126,7 @@ export class LeadMapper {
       cerradoManual: this.getBool(row, 'Cerrado Manual'),
       fechaUltimoSeguimiento: this.getDate(row, 'Fecha Ultimo seguimiento'),
       reintentosSeguimiento: parseInt(this.getString(row, 'N Reintentos Seguimiento') || '0') || 0,
-      seguimientoMarcado: false,
+      seguimientoMarcado: this.getBool(row, 'Seguimiento Marcado'),
       ultimaActualizacion: this.getDate(row, 'Ultima Actualizacion Lead'),
     };
   }
@@ -158,7 +156,7 @@ export class LeadMapper {
 
 function normalizeEstado(raw: string): EstadoLead {
   const key = raw.trim().toLowerCase();
-  return ESTADO_LEAD_NORMALIZE[key] ?? (raw as EstadoLead) ?? '';
+  return ESTADO_LEAD_NORMALIZE[key] ?? '';
 }
 
 export function normalizePhone(phone: string, countryCode = '54'): string {

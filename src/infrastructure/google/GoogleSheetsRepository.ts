@@ -7,7 +7,7 @@
 
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import { Lead, LeadState } from '../../domain/entities/Lead';
+import { Lead, LeadState, hasDuplicate, needsFollowUp } from '../../domain/entities/Lead';
 import { ILeadRepository, LeadFilter } from '../../domain/repositories/ILeadRepository';
 import { SheetsConfig } from '../config/config';
 import { LeadMapper, RawRow, normalizePhone } from './LeadMapper';
@@ -122,7 +122,7 @@ export class GoogleSheetsRepository implements ILeadRepository {
           if (col === secCfg.phoneColumn) return mainRow[mainCfg.phoneColumn] ?? '';
           if (col === 'Email') return mainRow[mainCfg.emailColumn] ?? '';
           if (col === 'Closer') return mainRow[mainCfg.closerColumn] ?? '';
-          if (col === 'Estado Lead') return 'LEAD INICIADO';
+          if (col === 'Estado Lead') return 'Lead Iniciado';
           if (col === 'Fecha Inicio Lead') return mainRow[mainCfg.dateColumn] ?? '';
           return '';
         });
@@ -285,11 +285,11 @@ export class GoogleSheetsRepository implements ILeadRepository {
     }
 
     if (filter.soloConDuplicados) {
-      result = result.filter((l) => l.state.posibleDuplicado && !l.state.duplicadoChequeado);
+      result = result.filter(hasDuplicate);
     }
 
     if (filter.soloConSeguimiento) {
-      result = result.filter((l) => l.state.estadoLead === 'Link Enviado: Seguimiento');
+      result = result.filter(needsFollowUp);
     }
 
     if (filter.limit) {

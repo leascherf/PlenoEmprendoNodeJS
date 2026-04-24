@@ -1,10 +1,4 @@
-// ─────────────────────────────────────────────
-//  USE CASE: GetLeadsUseCase
-//  Orquesta la obtención de leads con filtros.
-//  Solo habla con interfaces del dominio.
-// ─────────────────────────────────────────────
-
-import { Lead } from '../../domain/entities/Lead';
+import { Lead, hasDuplicate, needsFollowUp } from '../../domain/entities/Lead';
 import { ILeadRepository, LeadFilter } from '../../domain/repositories/ILeadRepository';
 
 export interface GetLeadsInput {
@@ -24,19 +18,11 @@ export class GetLeadsUseCase {
   async execute(input: GetLeadsInput = {}): Promise<GetLeadsOutput> {
     const leads = await this.leadRepo.getAll(input.filter);
 
-    const withDuplicates = leads.filter(
-      (l) => l.state.posibleDuplicado && !l.state.duplicadoChequeado
-    ).length;
-
-    const withFollowUp = leads.filter(
-      (l) => l.state.estadoLead === 'Link Enviado: Seguimiento'
-    ).length;
-
     return {
       leads,
       total: leads.length,
-      withDuplicates,
-      withFollowUp,
+      withDuplicates: leads.filter(hasDuplicate).length,
+      withFollowUp: leads.filter(needsFollowUp).length,
     };
   }
 }
