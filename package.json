@@ -5,21 +5,29 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build:backend": "tsc",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:frontend && npm run build:backend",
     "start": "node dist/index.js",
+    "db:init": "npx tsx scripts/initDb.ts",
+    "db:migrate": "npx tsx scripts/migrateFromSheets.ts",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.4.1",
     "express-session": "^1.18.0",
-    "google-auth-library": "^9.11.0",
     "googleapis": "^140.0.0",
+    "helmet": "^8.1.0",
+    "mysql2": "^3.22.3",
     "uuid": "^10.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/express-session": "^1.18.0",

@@ -1,81 +1,174 @@
 import 'dotenv/config';
+import path from 'path';
 import express, { Request, Response, NextFunction } from 'express';
 import session from 'express-session';
-import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import bcrypt from 'bcryptjs';
+import mysql from 'mysql2/promise';
 import { loadConfig } from './infrastructure/config/config';
-import { GoogleAuthService, GoogleAuthCredentials } from './infrastructure/google/GoogleAuthService';
-import { GoogleSheetsRepository } from './infrastructure/google/GoogleSheetsRepository';
+import { SheetReader } from './infrastructure/google/SheetReader';
+import { MariaDbLeadRepository } from './infrastructure/persistence/mysql/MariaDbLeadRepository';
+import { PlenoCredentialsRepository } from './infrastructure/persistence/mysql/PlenoCredentialsRepository';
 import { createAuthRouter } from './presentation/routes/auth';
 import { leadsRouter } from './presentation/routes/leads';
 import { ILeadRepository } from './domain/repositories/ILeadRepository';
-import { AuthUser } from './domain/services/IAuthService';
 
 declare module 'express-serve-static-core' {
   interface Request {
-    currentUser?: AuthUser;
     leadRepository?: ILeadRepository;
   }
 }
 
 async function bootstrap() {
   const config = loadConfig();
-  const authService = new GoogleAuthService(config.google);
+  const isProd = config.env === 'production';
 
+  // ── Base de datos ──────────────────────────────────────────────────
+  const pool = mysql.createPool({
+    host: config.db.host,
+    port: config.db.port,
+    user: config.db.user,
+    password: config.db.password,
+    database: config.db.database,
+    waitForConnections: true,
+    connectionLimit: 10,
+  });
+
+  // Verificar conexión
+  try {
+    await pool.execute('SELECT 1');
+    console.log('✓ Conexión a MySQL OK');
+  } catch (err) {
+    console.error('✗ Error conectando a MySQL:', err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
+
+  // ── Repositorios ───────────────────────────────────────────────────
+  const credentialsRepo = new PlenoCredentialsRepository(pool);
+  const sheetReader = new SheetReader(config.googleServiceAccountKey);
+  const leadRepository = new MariaDbLeadRepository(pool, sheetReader, config.mainSheet);
+
+  // ── Bootstrap: seed de password desde .env ────────────────────────
+  await seedAdminPasswordIfNeeded(credentialsRepo, config.adminPassword);
+
+  // ── Express ───────────────────────────────────────────────────────
   const app = express();
 
-  app.use(cors({
-    origin: config.frontendUrl,
-    credentials: true,
+  app.set('trust proxy', 1);
+
+  // HTTPS redirect en producción
+  if (isProd) {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.headers['x-forwarded-proto'] === 'https') return next();
+      res.redirect(301, 'https://' + req.headers.host + req.url);
+    });
+  }
+
+  // Helmet — headers de seguridad
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc:  ["'self'"],
+        styleSrc:   ["'self'", "'unsafe-inline'"],
+        imgSrc:     ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+      },
+    },
   }));
 
-  app.use(express.json());
+  // Rate limiting
+  const globalLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    skipSuccessfulRequests: true,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  app.use(globalLimiter);
+
+  app.use(express.json({ limit: '64kb' }));
+  app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
   app.use(session({
+    name: 'pe.sid',
     secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000,
+      secure: isProd,
+      sameSite: 'strict',
+      maxAge: 2 * 60 * 60 * 1000, // 2h
     },
   }));
 
-  // Middleware: reconstruye el repository por request usando la identidad
-  // y las credenciales OAuth guardadas por separado en la sesión.
+  // Inyectar el repository en cada request autenticado
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    const user = (req.session as any)?.user as AuthUser | undefined;
-    const credentials = (req.session as any)?.oauthCredentials as GoogleAuthCredentials | undefined;
-
-    if (user && credentials) {
-      const oauthClient = authService.getAuthenticatedClient(credentials);
-      req.leadRepository = new GoogleSheetsRepository(oauthClient, config.sheets);
-      req.currentUser = user;
-    }
-
-    next();
-  });
-
-  app.use('/api/auth', createAuthRouter(authService));
-
-  app.use('/api/leads', (req: Request, res: Response, next: NextFunction) => {
-    if (!req.leadRepository) {
-      res.status(401).json({ error: 'No autenticado' });
-      return;
+    if ((req.session as any).isAuthenticated) {
+      req.leadRepository = leadRepository;
     }
     next();
   });
+
+  // ── Rutas API ──────────────────────────────────────────────────────
+  app.use('/api/auth/login', loginLimiter);
+  app.use('/api/auth', createAuthRouter(credentialsRepo));
   app.use('/api/leads', leadsRouter);
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ ok: true, ts: new Date().toISOString() });
   });
 
-  app.listen(config.port, () => {
-    console.log(`\nPlenoEmprendo API corriendo en http://localhost:${config.port}`);
-    console.log(`   Auth Google: http://localhost:${config.port}/api/auth/google`);
-    console.log(`   Health:      http://localhost:${config.port}/api/health\n`);
+  // ── Frontend estático (Vue compilado) ──────────────────────────────
+  const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+  app.use(express.static(frontendDist));
+
+  // SPA fallback: cualquier ruta no-API devuelve index.html
+  app.get('*', (req: Request, res: Response) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    }
   });
+
+  // ── Arrancar servidor ─────────────────────────────────────────────
+  app.listen(config.port, () => {
+    console.log(`✓ Servidor escuchando en http://localhost:${config.port}`);
+  });
+}
+
+// ─────────────────────────────────────────────
+//  Bootstrap: si la tabla está vacía y hay ADMIN_PASSWORD en .env,
+//  hashear y guardar. Una vez seedeado, ADMIN_PASSWORD puede borrarse del .env.
+// ─────────────────────────────────────────────
+
+async function seedAdminPasswordIfNeeded(
+  repo: PlenoCredentialsRepository,
+  plainPassword: string
+): Promise<void> {
+  try {
+    const existing = await repo.getHash();
+    if (existing) return; // ya está seedeado
+
+    if (!plainPassword) {
+      console.warn('⚠ No hay contraseña en pleno_credentials ni ADMIN_PASSWORD en .env. El login no funcionará.');
+      return;
+    }
+
+    const hash = await bcrypt.hash(plainPassword, 12);
+    await repo.setHash(hash);
+    console.log('✓ Password de admin seedeada desde ADMIN_PASSWORD (.env). Podés borrarla del .env.');
+  } catch (err) {
+    console.error('✗ Error al inicializar credenciales:', err instanceof Error ? err.message : err);
+  }
 }
 
 bootstrap().catch(console.error);

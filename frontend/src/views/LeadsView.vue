@@ -195,8 +195,6 @@ async function onLeadSaved(contactId: string, changes: Partial<Lead['state']>) {
       <RouterLink to="/metrics" class="btn-primary text-sm">Métricas</RouterLink>
 
       <div class="flex items-center gap-2">
-        <img v-if="auth.user?.picture" :src="auth.user.picture" class="w-7 h-7 rounded-full" />
-        <span class="text-sm text-gray-700">{{ auth.user?.name }}</span>
         <button @click="logout" class="btn-secondary text-sm">Salir</button>
       </div>
     </header>

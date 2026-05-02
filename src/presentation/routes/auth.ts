@@ -1,51 +1,52 @@
 import { Router, Request, Response } from 'express';
-import { GoogleAuthService } from '../../infrastructure/google/GoogleAuthService';
-import { AuthUser } from '../../domain/services/IAuthService';
+import bcrypt from 'bcryptjs';
+import { PlenoCredentialsRepository } from '../../infrastructure/persistence/mysql/PlenoCredentialsRepository';
 
-// El router de auth recibe GoogleAuthService (concreto) porque el flujo
-// OAuth es 100% Google — no tiene sentido abstraerlo aquí.
-export function createAuthRouter(authService: GoogleAuthService): Router {
+// ─────────────────────────────────────────────
+//  Auth router — password simple (bcrypt + session)
+//  Reemplaza el flujo OAuth de Google.
+// ─────────────────────────────────────────────
+
+export function createAuthRouter(credentialsRepo: PlenoCredentialsRepository): Router {
   const router = Router();
 
-  // GET /api/auth/google → redirige a Google
-  router.get('/google', (_req: Request, res: Response) => {
-    res.redirect(authService.getAuthUrl());
-  });
+  // POST /api/auth/login
+  router.post('/login', async (req: Request, res: Response) => {
+    const { password } = req.body ?? {};
 
-  // GET /api/auth/callback → Google redirige acá después del login
-  router.get('/callback', async (req: Request, res: Response) => {
-    const code = req.query.code as string;
-
-    if (!code) {
-      res.status(400).json({ error: 'Código de autorización faltante' });
+    if (typeof password !== 'string' || !password) {
+      res.status(400).json({ error: 'Contraseña requerida' });
       return;
     }
 
     try {
-      const { user, credentials } = await authService.exchangeCodeFull(code);
+      const hash = await credentialsRepo.getHash();
+      if (!hash) {
+        res.status(500).json({ error: 'El panel todavía no fue inicializado' });
+        return;
+      }
 
-      // Guardar identidad y credenciales por separado en la sesión.
-      // Las credenciales (tokens) son un detalle de infraestructura —
-      // no se mezclan con los datos de identidad del usuario.
-      (req.session as any).user = user;
-      (req.session as any).oauthCredentials = credentials;
+      const ok = await bcrypt.compare(password, hash);
+      if (!ok) {
+        res.status(401).json({ error: 'Contraseña incorrecta' });
+        return;
+      }
 
-      const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-      res.redirect(`${frontendUrl}/leads`);
+      (req.session as any).isAuthenticated = true;
+      res.json({ ok: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error de autenticación';
       res.status(500).json({ error: message });
     }
   });
 
-  // GET /api/auth/me → devuelve solo la identidad del usuario (sin tokens)
+  // GET /api/auth/me — confirma si hay sesión activa
   router.get('/me', (req: Request, res: Response) => {
-    const user = (req.session as any).user as AuthUser | undefined;
-    if (!user) {
+    if (!(req.session as any).isAuthenticated) {
       res.status(401).json({ error: 'No autenticado' });
       return;
     }
-    res.json(user);
+    res.json({ authenticated: true });
   });
 
   // POST /api/auth/logout

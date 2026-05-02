@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/plenoEmprendo/'),
   routes: [
     {
       path: '/',
@@ -31,10 +31,10 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (to.meta.requiresAuth) {
     const auth = useAuthStore()
-    if (!auth.user) {
+    if (!auth.isAuthenticated) {
       await auth.fetchMe()
     }
-    if (!auth.user) {
+    if (!auth.isAuthenticated) {
       return { name: 'login' }
     }
   }

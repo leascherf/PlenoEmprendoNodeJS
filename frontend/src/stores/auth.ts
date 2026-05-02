@@ -1,26 +1,32 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { authApi, type AuthUser } from '../api/auth'
+import { authApi } from '../api/auth'
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<AuthUser | null>(null)
+  const isAuthenticated = ref(false)
   const loading = ref(false)
 
   async function fetchMe() {
     loading.value = true
     try {
-      user.value = await authApi.me()
+      const res = await authApi.me()
+      isAuthenticated.value = res.authenticated === true
     } catch {
-      user.value = null
+      isAuthenticated.value = false
     } finally {
       loading.value = false
     }
   }
 
-  async function logout() {
-    await authApi.logout()
-    user.value = null
+  async function login(password: string) {
+    await authApi.login(password)
+    isAuthenticated.value = true
   }
 
-  return { user, loading, fetchMe, logout }
+  async function logout() {
+    await authApi.logout()
+    isAuthenticated.value = false
+  }
+
+  return { isAuthenticated, loading, fetchMe, login, logout }
 })
